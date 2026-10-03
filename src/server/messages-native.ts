@@ -613,11 +613,11 @@ export async function handleNativeMessages(options: HandleNativeMessagesOptions)
       });
       if (!nextAccountId) break;
       const recovery = response.status === 403 ? "oauth-account-403" : "rate-limit-429";
+      discard(response);
       oauthBinding = await resolveNativeOAuthBinding(config, {
         sessionKey: options.sessionKey, model: route.modelId, candidateAccountId: nextAccountId,
         expectedRecoverySelection,
       });
-      discard(response);
       oauthFailovers++;
       rebuildFor(oauthProvider(oauthBinding));
       logCtx.provider = formatAnthropicProviderForLog(route.providerName, oauthBinding.snapshot.accountId, config);
