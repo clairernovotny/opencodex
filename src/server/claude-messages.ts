@@ -1209,7 +1209,7 @@ async function handleClaudeMessagesWithBudget(
       clientIdentity: captureAnthropicClientIdentity(req.headers),
       callerAnthropicBeta: req.headers.get("anthropic-beta"),
       sessionKey: anthropicSessionKeyFromParts({
-        sessionIdHeader: req.headers.get("session_id") ?? req.headers.get("x-claude-code-session-id"),
+        sessionIdHeader: req.headers.get("session_id")?.trim() || req.headers.get("x-claude-code-session-id"),
         threadIdHeader: req.headers.get("thread_id"),
         clientThreadId: conversationIdFromClaudeMetadata(isRec(nativeBody.metadata) ? nativeBody.metadata : undefined),
         promptCacheKey: typeof internalBody.prompt_cache_key === "string" ? internalBody.prompt_cache_key : null,
