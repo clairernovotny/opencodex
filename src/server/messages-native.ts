@@ -17,6 +17,12 @@
  *
  * Loaded lazily by `claude-messages.ts` only when the switch is on and a route is eligible.
  */
+import { bindAnthropicRefusalCredential, rotateAnthropicAccountOnResponse } from "../oauth/anthropic-account-refusal";
+import { claimAnthropicFamilyRevalidation } from "../oauth/anthropic-model-quota";
+import { captureConfigGeneration } from "../lib/state-store-sweeper";
+import { recordAnthropicAccountQuotaFromHeaders } from "../providers/quota";
+import { credentialGeneration, getAccountCredentialWithStatus } from "../oauth/store";
+import { ANTHROPIC_POOL_MAX_FAILOVERS_PER_REQUEST } from "../oauth/anthropic-routing";
 import { enforceAnthropicImageLimits } from "../adapters/anthropic-image-guard";
 import { normalizeAnthropicImages } from "../adapters/anthropic-image-normalize";
 import { formatAnthropicErrorBody } from "../adapters/anthropic";
@@ -150,6 +156,7 @@ export interface HandleNativeMessagesOptions {
    */
   callerAnthropicBeta?: string | null;
   clientIdentity?: AnthropicClientIdentity;
+  sessionKey?: string | null;
 }
 
 type FinishLog = (status: number, message?: string, meta?: FinalRequestLogMeta) => void;
@@ -373,7 +380,7 @@ export async function handleNativeMessages(options: HandleNativeMessagesOptions)
   const oauthProvider = (binding: NativeOAuthBinding): OcxProviderConfig => ({ ...route.provider, apiKey: binding.snapshot.accessToken });
   if (route.provider.authMode === "oauth") {
     try {
-      oauthBinding = await resolveNativeOAuthBinding(config);
+      oauthBinding = await resolveNativeOAuthBinding(config, { sessionKey: options.sessionKey, model: route.modelId });
     } catch (error) {
       cleanupAbort();
       upstream.abort();
@@ -479,7 +486,7 @@ export async function handleNativeMessages(options: HandleNativeMessagesOptions)
               for (let attempt = 0; !nativeOAuthBindingIsCurrent(oauthBinding); attempt++) {
                 if (attempt >= 3) throw new NativeOAuthSelectionChangedError();
                 try {
-                  oauthBinding = await resolveNativeOAuthBinding(config);
+                  oauthBinding = await resolveNativeOAuthBinding(config, { sessionKey: options.sessionKey, model: route.modelId });
                 } catch (error) {
                   if (error instanceof OAuthAccountPausedError || error instanceof OAuthLoginRequiredError
                     || error instanceof AnthropicAccountCooldownError) throw error;
@@ -503,12 +510,29 @@ export async function handleNativeMessages(options: HandleNativeMessagesOptions)
             if (init.signal?.aborted) throw init.signal.reason;
             if (!spendTracker.charge()) throw new NativeMessagesSpendRefusal();
             noteProviderAttemptSend(logCtx, route.providerName, activeProvider, logCtx.usageLogInputTokens, transportRecovery ?? recovery);
-            const dispatched = await sendWithConnectionPolicy(
-              (activeProvider as OcxProviderTransport).fetch ?? execute,
-              wire.url,
-              applyUpstreamRecoveryInit({ ...init, method: "POST", headers, body: wire.body }, transportRecovery),
-              { providerName: route.providerName, provider: activeProvider },
-            );
+            const snapshot = oauthBinding?.snapshot;
+            const writerGeneration = snapshot ? captureConfigGeneration() : 0;
+            const ownsBearer = snapshot && headers.get("authorization") === `Bearer ${snapshot.accessToken}` && !headers.has("x-api-key");
+            const releaseFamily = snapshot ? claimAnthropicFamilyRevalidation(snapshot.accountId, route.modelId) : () => {};
+            if (!releaseFamily) throw new AnthropicAccountCooldownError(1);
+            let dispatched: Response;
+            try {
+              dispatched = await sendWithConnectionPolicy(
+                (activeProvider as OcxProviderTransport).fetch ?? execute,
+                wire.url,
+                applyUpstreamRecoveryInit({ ...init, method: "POST", headers, body: wire.body }, transportRecovery),
+                { providerName: route.providerName, provider: activeProvider },
+              );
+            } finally { releaseFamily(); }
+            if (ownsBearer && snapshot) {
+              try {
+                const current = getAccountCredentialWithStatus("anthropic", snapshot.accountId);
+                if (current && !current.needsReauth && credentialGeneration(current.credential) === snapshot.generation) {
+                  bindAnthropicRefusalCredential(dispatched, snapshot);
+                  recordAnthropicAccountQuotaFromHeaders(snapshot.accountId, dispatched.headers, writerGeneration, dispatched.status, route.modelId);
+                }
+              } catch { /* Passive observation must not fail the response. */ }
+            }
             if (!dispatched.ok) await recordKeyAttemptFailure(logCtx, dispatched, init.signal ?? upstream.signal);
             return dispatched;
           },
@@ -544,7 +568,7 @@ export async function handleNativeMessages(options: HandleNativeMessagesOptions)
       rebuildFor(rotated);
       response = await send("key-401");
     }
-    const retryPolicy = rateLimitRetryPolicyFor(activeProvider);
+    const retryPolicy = oauthBinding ? undefined : rateLimitRetryPolicyFor(activeProvider);
     let retries = 0;
     // A refusal this proxy synthesized for a reset replay is not a provider rate limit.
     while (
@@ -576,6 +600,27 @@ export async function handleNativeMessages(options: HandleNativeMessagesOptions)
       discard(response);
       rebuildFor(rotated);
       response = await send("key-429");
+    }
+    const oauthRetryKey = {};
+    let oauthFailovers = 0;
+    while (oauthBinding && (response.status === 429 || response.status === 403)) {
+      const expectedRecoverySelection = oauthBinding.selection;
+      const nextAccountId = await rotateAnthropicAccountOnResponse(response, {
+        config, accountId: oauthBinding.snapshot.accountId, model: route.modelId,
+        sessionKey: oauthBinding.sessionKey, decision: oauthBinding.routeDecision,
+        signal: upstream.signal, requestKey: oauthRetryKey,
+        canRetry: transientSendAvailable() && oauthFailovers < ANTHROPIC_POOL_MAX_FAILOVERS_PER_REQUEST,
+      });
+      if (!nextAccountId) break;
+      oauthBinding = await resolveNativeOAuthBinding(config, {
+        sessionKey: options.sessionKey, model: route.modelId, candidateAccountId: nextAccountId,
+        expectedRecoverySelection,
+      });
+      discard(response);
+      oauthFailovers++;
+      rebuildFor(oauthProvider(oauthBinding));
+      logCtx.provider = formatAnthropicProviderForLog(route.providerName, oauthBinding.snapshot.accountId, config);
+      response = await send("rate-limit-429");
     }
   } catch (error) {
     releaseRetainedRequest();

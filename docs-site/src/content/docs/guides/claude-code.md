@@ -93,6 +93,16 @@ Operational contract when enabled:
 
 See [Configuration](/reference/configuration/providers/#anthropicaccountpool-experimental).
 
+### Native Messages with account pooling
+
+With both `protocols.rollout.managedMessagesNative` and
+`protocols.rollout.managedMessagesNativeOAuth` enabled, direct Anthropic OAuth routes
+can use the stored account pool while preserving Claude's native message history and
+cache breakpoints. Session affinity, model routes, pause/cooldown exclusions and bounded
+pre-output account recovery follow the same pool policy. OAuth tool references are renamed
+consistently with their declarations. A switch may cold-start the replacement account's cache;
+this does not provide a shared cache across accounts. The switches remain opt-in.
+
 ## Quickstart
 
 ```bash

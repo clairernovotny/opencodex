@@ -145,3 +145,12 @@ limits array retires absent families. Shared rejection and family rejection keep
 resets, so Fable must wait for both relevant windows while Sonnet need only wait for shared quota.
 
 Regression coverage: `tests/adapters/anthropic/anthropic-model-weekly-admission.test.ts`.
+
+## Native Messages dispatch
+
+`src/server/messages-native-oauth.ts` binds native Claude Messages requests through the same
+Anthropic session, model-route and generation-fenced selection authority as Responses.
+`src/server/messages-native.ts` preserves the source message/cache shape while substituting
+the committed serving credential, observes that credential's quota headers and applies bounded
+pre-output refusal recovery. Account changes may require a new cache on the replacement account;
+the proxy does not claim cross-account cache sharing.
