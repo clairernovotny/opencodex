@@ -309,7 +309,7 @@ export const configSchema = z.object({
   streamMode: z.enum(["auto", "legacy-tee", "eager-relay"]).optional().catch(undefined),
   blockedModelRedirects: blockedModelRedirectsSchema.optional().catch(undefined),
   // Preserve malformed hand edits for a local routing error; candidate writes use the shared parser.
-  anthropicAccountPool: z.unknown().optional(),
+  anthropicAccountPool: z.object({ nativeMessages: z.boolean().optional() }).passthrough().optional(),
   // Same degrade-don't-reject rationale as the fields above: a hand-edited
   // non-string must not trip the backup-and-defaults repair path. Unset then
   // takes the canonical sideband path (src/server/live.ts normalizeSidebandRoot).

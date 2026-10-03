@@ -1692,7 +1692,7 @@ export async function handleClaudeCountTokens(
     // A thread delta would undercount; refuse it exactly as the translated Messages path does.
     if (carriesMessageThread(raw)) return messageThreadUnsupportedResponse();
     // PF-08: an eligible managed-key route counts the body the native lane would send.
-    const nativeCountBody = resolveProtocolSettings(config).rollout.managedMessagesNative
+    const nativeCountBody = (resolveProtocolSettings(config).rollout.managedMessagesNative || resolveProtocolSettings(config, "").rollout.managedMessagesNative)
       ? (await import("./messages-native")).nativeMessagesCountBody(config, cc, raw, { fastRow: countFastRow !== null }, captureAnthropicClientIdentity(req.headers))
       : undefined;
     // A count answers for the prompt a real turn from this model would forward, so it projects

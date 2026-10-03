@@ -154,3 +154,12 @@ Anthropic session, model-route and generation-fenced selection authority as Resp
 the committed serving credential, observes that credential's quota headers and applies bounded
 pre-output refusal recovery. Account changes may require a new cache on the replacement account;
 the proxy does not claim cross-account cache sharing.
+
+## Native pooling preference
+
+`anthropicAccountPool.nativeMessages` is an Anthropic-only boolean pool preference. When
+pooling is enabled, `src/protocols/settings.ts` resolves both native Messages switches together
+from this value, defaulting to true. Pool-off leaves explicit protocol rollout behavior intact.
+The canonical pool DTO and both pool writer surfaces read and persist the same preference;
+other provider kinds do not support it. The dashboard control under **How account selection works** owns the setting while
+the native route eligibility rules still decide when a request requires the bridge.
