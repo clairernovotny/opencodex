@@ -355,6 +355,9 @@ builds without a provider UUID.
 Key-auth and caller-forward requests retain their metadata. The answer's
 `tool_use` names are mapped back for exactly those names. A 401 or 429 is answered as the bridge
 answers an unpooled account: no refresh replay, no same-token replay, no rotation.
+Native OAuth Messages rename typed `tool_reference.tool_name` blocks consistently with declared
+client tools, including nested tool-result content. Cache markers and lifetimes are retained,
+and arbitrary tool arguments and input schemas are not traversed.
 
 `handleNativeMessages` mirrors native Chat on the shared pieces: `beginInferenceAttempt`,
 `createFinalRequestLog`, the request spend tracker charged per physical send, proactive key
@@ -435,7 +438,3 @@ implicitly. The three are declared as `api` capabilities in `src/cli/capabilitie
 routes carry no exemption in `src/server/management/route-registry.ts`; the capability mutation
 check reads the registry's `mutates`, so the read-only plan POST is not a write. `tests/cli/cli-api-protocols.test.ts` pins the requests, the usage errors and that every
 protocol route is verbed.
-
-Native OAuth Messages rename typed `tool_reference.tool_name` blocks consistently with declared
-client tools, including nested tool-result content. Cache markers and lifetimes are retained,
-and arbitrary tool arguments and input schemas are not traversed.
