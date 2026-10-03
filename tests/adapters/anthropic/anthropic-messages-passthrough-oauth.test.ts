@@ -40,11 +40,14 @@ const SOURCE = {
   messages: [
     { role: "user", content: "fixture question" },
     { role: "assistant", content: [
-      { type: "tool_use", id: "toolu_1", name: "lookup", input: {} },
+      { type: "tool_use", id: "toolu_1", name: "lookup", input: { opaque: { type: "tool_reference", tool_name: "lookup" } } },
       { type: "tool_use", id: "toolu_2", name: "bash", input: { command: "true" } },
     ] },
     { role: "user", content: [
-      { type: "tool_result", tool_use_id: "toolu_1", content: "fixture result" },
+      { type: "tool_result", tool_use_id: "toolu_1", content: [
+        { type: "text", text: "fixture result", cache_control: { type: "ephemeral", ttl: "1h", scope: "turn" } },
+        { type: "tool_reference", tool_name: "lookup" },
+      ] },
       { type: "tool_result", tool_use_id: "toolu_2", content: "" },
     ] },
   ],
@@ -100,10 +103,15 @@ describe("buildAnthropicMessagesPassthroughRequest with OAuth", () => {
     expect(wire.tool_choice).toEqual({ type: "tool", name: "custom_lookup" });
     const history = wire.messages[1]!.content as { name: string }[];
     expect(history.map(block => block.name)).toEqual(["custom_lookup", "bash"]);
+    expect((history[0] as { input: unknown }).input).toEqual({ opaque: { type: "tool_reference", tool_name: "lookup" } });
+    const resultContent = (wire.messages[2]!.content as { content: { type: string; tool_name?: string; cache_control?: unknown }[] }[])[0]!.content;
+    expect(resultContent[1]).toEqual({ type: "tool_reference", tool_name: "custom_lookup" });
+    expect(resultContent[0]!.cache_control).toEqual({ type: "ephemeral", ttl: "1h", scope: "turn" });
     expect([...built.oauthToolNames!]).toEqual([["custom_lookup", "lookup"]]);
     // The source is untouched.
     expect(SOURCE.tools[0]!.name).toBe("lookup");
     expect(SOURCE.system).toBe("fixture system");
+    expect((SOURCE.messages[2]!.content[0] as { content: { tool_name?: string }[] }).content[1]!.tool_name).toBe("lookup");
   });
 
   test("an identity block already present is not repeated", () => {
