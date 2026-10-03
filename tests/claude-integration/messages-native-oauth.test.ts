@@ -488,6 +488,18 @@ describe("native pooled Messages dispatch", () => {
     expect(bearers[2]).toBe(bearers[0]);
   });
 
+  test("blank session_id retains affinity through the Claude Code session header", async () => {
+    await seed(2);
+    const config = fixtureConfig();
+    config.anthropicAccountPool = { enabled: true, strategy: "round-robin" };
+    for (const session of ["fallback-a", "fallback-b", "fallback-a"]) {
+      expect((await send(config, { ...BODY, stream: false }, { session_id: " ", "x-claude-code-session-id": session })).response.status).toBe(200);
+    }
+    const bearers = sent.map(entry => entry.headers.get("authorization"));
+    expect(bearers[0]).not.toBe(bearers[1]);
+    expect(bearers[2]).toBe(bearers[0]);
+  });
+
   test("strict model routes admit only their declared account", async () => {
     const ids = await seed(2);
     const config = fixtureConfig();
