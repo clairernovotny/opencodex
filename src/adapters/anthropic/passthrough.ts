@@ -150,14 +150,36 @@ export function anthropicOAuthWireBody(body: Rec): { body: Rec; toolNames: Map<s
   if (isRec(body.tool_choice) && body.tool_choice.type === "tool" && renames(body.tool_choice.name)) {
     out.tool_choice = { ...body.tool_choice, name: wireName(body.tool_choice.name) };
   }
-  const isRenamedUse = (block: unknown): block is Rec & { name: string } => isRec(block) && block.type === "tool_use" && renames(block.name);
+  const mapContentBlocks = (blocks: unknown[]): { blocks: unknown[]; changed: boolean } => {
+    let changed = false;
+    const mapped = blocks.map(block => {
+      if (!isRec(block)) return block;
+      if (block.type === "tool_use" && renames(block.name)) {
+        changed = true;
+        return { ...block, name: wireName(block.name) };
+      }
+      if (block.type === "tool_reference" && renames(block.tool_name)) {
+        changed = true;
+        return { ...block, tool_name: wireName(block.tool_name) };
+      }
+      // tool_reference blocks are nested inside tool_result content. Follow only that
+      // typed content container; tool inputs and schemas are opaque caller data.
+      if (block.type === "tool_result" && Array.isArray(block.content)) {
+        const nested = mapContentBlocks(block.content);
+        if (nested.changed) {
+          changed = true;
+          return { ...block, content: nested.blocks };
+        }
+      }
+      return block;
+    });
+    return { blocks: mapped, changed };
+  };
   if (Array.isArray(body.messages)) {
     out.messages = body.messages.map(message => {
-      if (!isRec(message) || !Array.isArray(message.content) || !message.content.some(isRenamedUse)) return message;
-      return {
-        ...message,
-        content: message.content.map(block => isRenamedUse(block) ? { ...block, name: wireName(block.name) } : block),
-      };
+      if (!isRec(message) || !Array.isArray(message.content)) return message;
+      const content = mapContentBlocks(message.content);
+      return content.changed ? { ...message, content: content.blocks } : message;
     });
   }
   return { body: out, toolNames };
