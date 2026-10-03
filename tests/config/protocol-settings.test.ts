@@ -12,6 +12,7 @@ import {
   resolveProtocolSettings,
 } from "../../src/protocols/settings";
 import { configSchema } from "../../src/config/schema/config-schema";
+import { validateConfigCandidate } from "../../src/config/diagnostics";
 import type { OcxConfig } from "../../src/types";
 
 function cfg(extra: Record<string, unknown>): OcxConfig {
@@ -106,7 +107,16 @@ test("the config schema validates nativeMessages as a boolean while retaining po
     expect(result.success).toBe(true);
     if (result.success) expect(result.data).toMatchObject({ nativeMessages, stickyLimit: 3 });
   }
-  for (const nativeMessages of ["false", null, 0]) expect(poolSchema.safeParse({ nativeMessages }).success).toBe(false);
+  for (const nativeMessages of ["false", null, 0]) {
+    expect(poolSchema.parse({ enabled: true, nativeMessages, stickyLimit: 3 })).toMatchObject({ nativeMessages: false, stickyLimit: 3 });
+    const candidate = validateConfigCandidate({ anthropicAccountPool: { nativeMessages } });
+    expect(candidate.ok).toBe(false);
+    if (!candidate.ok) expect(candidate.error).toContain("anthropicAccountPool.nativeMessages");
+  }
+  for (const anthropicAccountPool of [null, "false", 0]) {
+    expect(poolSchema.parse(anthropicAccountPool)).toBeUndefined();
+    expect(validateConfigCandidate({ anthropicAccountPool }).ok).toBe(false);
+  }
 });
 
 test("policy revision records explicit native flags even when Anthropic pool defaults mask them", () => {
