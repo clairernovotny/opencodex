@@ -455,6 +455,25 @@ describe("native pooled Messages dispatch", () => {
     }
     expect(getAnthropicAccountHealthSnapshot(ids[0]!)).not.toBeNull();
     expect(JSON.parse(metadata.user_id).account_uuid).toBe(uuids[0]);
+    expect(row.attempts?.[1]?.recoveryKinds).toEqual(["rate-limit-429"]);
+  });
+
+  test("account-refusal 403 rebuild is attributed as OAuth account recovery", async () => {
+    await seed(2);
+    const config = fixtureConfig();
+    config.anthropicAccountPool = { enabled: true };
+    config.providers.anthropic!.fetch = (async (input, init) => {
+      sent.push({ url: String(input), headers: new Headers(init?.headers), body: JSON.parse(String(init?.body)) });
+      return sent.length === 1
+        ? Response.json({ type: "error", error: { type: "permission_error", message: "Your account does not have access to Claude Code" } }, { status: 403 })
+        : Response.json(MESSAGE);
+    }) as typeof fetch;
+
+    const { response, row } = await send(config, { ...BODY, stream: false });
+
+    expect(response.status).toBe(200);
+    expect(sent).toHaveLength(2);
+    expect(row.attempts?.[1]?.recoveryKinds).toEqual(["oauth-account-403"]);
   });
 
   test("two conversations retain sticky account routing after global selection moves", async () => {

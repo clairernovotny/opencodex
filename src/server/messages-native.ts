@@ -462,7 +462,7 @@ export async function handleNativeMessages(options: HandleNativeMessagesOptions)
   const transientSendAvailable = (): boolean => remainingTransientSends() > 0;
   const selector: NativeMessagesSelector = options.selector ?? {};
 
-  const send = async (recovery?: "rate-limit-429" | "key-429" | "key-401"): Promise<Response> => {
+  const send = async (recovery?: "rate-limit-429" | "oauth-account-403" | "key-429" | "key-401"): Promise<Response> => {
     const remaining = remainingTransientSends();
     if (requestTransientPolicy && remaining <= 0) {
       throw new Error("native Messages transient send budget exhausted before recovery dispatch");
@@ -612,6 +612,7 @@ export async function handleNativeMessages(options: HandleNativeMessagesOptions)
         canRetry: transientSendAvailable() && oauthFailovers < ANTHROPIC_POOL_MAX_FAILOVERS_PER_REQUEST,
       });
       if (!nextAccountId) break;
+      const recovery = response.status === 403 ? "oauth-account-403" : "rate-limit-429";
       oauthBinding = await resolveNativeOAuthBinding(config, {
         sessionKey: options.sessionKey, model: route.modelId, candidateAccountId: nextAccountId,
         expectedRecoverySelection,
@@ -620,7 +621,7 @@ export async function handleNativeMessages(options: HandleNativeMessagesOptions)
       oauthFailovers++;
       rebuildFor(oauthProvider(oauthBinding));
       logCtx.provider = formatAnthropicProviderForLog(route.providerName, oauthBinding.snapshot.accountId, config);
-      response = await send("rate-limit-429");
+      response = await send(recovery);
     }
   } catch (error) {
     releaseRetainedRequest();
