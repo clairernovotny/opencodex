@@ -1693,7 +1693,7 @@ export async function handleClaudeCountTokens(
     if (carriesMessageThread(raw)) return messageThreadUnsupportedResponse();
     // PF-08: an eligible managed-key route counts the body the native lane would send.
     const nativeCountBody = resolveProtocolSettings(config).rollout.managedMessagesNative
-      ? (await import("./messages-native")).nativeMessagesCountBody(config, cc, raw, { fastRow: countFastRow !== null })
+      ? (await import("./messages-native")).nativeMessagesCountBody(config, cc, raw, { fastRow: countFastRow !== null }, captureAnthropicClientIdentity(req.headers))
       : undefined;
     // A count answers for the prompt a real turn from this model would forward, so it projects
     // the same unserialized content that turn's `message_start` floor does. Counting the raw

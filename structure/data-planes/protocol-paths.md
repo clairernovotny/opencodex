@@ -356,6 +356,16 @@ shared bearer-fenced recovery helper within the existing account-failover and ph
 bounds. Each physical response records quota headers against the credential that sent it.
 There is no account rotation after streamed assistant output starts.
 
+Observed native CLI and Desktop Code compatibility bundles retain the native billing/identity
+system preamble when its exact known shape is present. `src/adapters/anthropic/native-client-preamble.ts`
+recognizes the source ordering without generating or signing billing text; generated requests
+retain SDK identity insertion. Native counting uses the same observed bundle as dispatch.
+The observed first-party client beta allowance preserves known inline-tool, per-message effort,
+thinking display, advisor and scoped-cache request schemas. Advisor may perform the sub-inference
+the native client already requested; the proxy injects neither advisor nor any beta-gated body.
+Generic managed callers retain the original narrower allowance; compatible destinations never
+receive the first-party native allowance. These compatibility handles grant no credential authority.
+
 `handleNativeMessages` mirrors native Chat on the shared pieces: `beginInferenceAttempt`,
 `createFinalRequestLog`, the request spend tracker charged per physical send, proactive key
 selection, 401 and 429 key-pool rotation, same-target 429 replay, the reset/transient retry
@@ -437,5 +447,7 @@ check reads the registry's `mutates`, so the read-only plan POST is not a write.
 protocol route is verbed.
 
 Native OAuth Messages rename typed `tool_reference.tool_name` blocks consistently with declared
-client tools, including nested tool-result content. Cache markers and lifetimes are retained,
-and arbitrary tool arguments and input schemas are not traversed.
+client tools, including nested tool-result content and Claude Code inline `tool_addition` and
+`tool_removal` blocks. Inline tool definitions are collected before references are mapped, so
+references may precede their definition. Cache markers and lifetimes are retained, and arbitrary
+tool arguments and input schemas are not traversed.

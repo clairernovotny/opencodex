@@ -127,6 +127,50 @@ describe("buildAnthropicMessagesPassthroughRequest with OAuth", () => {
     expect(() => anthropicOAuthWireBody(body)).toThrow("collide");
   });
 
+  test("renames inline tool additions before references and removals without mutating source or cache metadata", () => {
+    const body = {
+      tools: [{ name: "lookup", input_schema: { type: "object", properties: {} } }],
+      messages: [{ role: "assistant", content: [
+        { type: "tool_addition", tool: { type: "tool_reference", name: "ReadNotifications" }, cache_control: { type: "ephemeral", ttl: "1h" } },
+        { type: "tool_addition", tool: { type: "tool_definition", definition: {
+          name: "ReadNotifications", input_schema: { type: "object", properties: { q: { type: "string" } } },
+        } } },
+        { type: "tool_removal", tool: { type: "tool_reference", name: "ReadNotifications" } },
+        { type: "tool_addition", tool: { type: "tool_reference", name: "lookup" } },
+        { type: "tool_removal", tool: { type: "tool_reference", name: "lookup" } },
+        { type: "text", text: "keep cache", cache_control: { type: "ephemeral", ttl: "1h", scope: "turn" } },
+      ] }],
+    };
+    const original = structuredClone(body);
+    const shaped = anthropicOAuthWireBody(body);
+    const blocks = (shaped.body.messages as { content: Record<string, unknown>[] }[])[0]!.content;
+    expect((blocks[0]!.tool as Record<string, unknown>).name).toBe("custom_ReadNotifications");
+    expect(blocks[0]!.cache_control).toEqual({ type: "ephemeral", ttl: "1h" });
+    expect((((blocks[1]!.tool as Record<string, unknown>).definition as Record<string, unknown>).name)).toBe("custom_ReadNotifications");
+    expect((blocks[2]!.tool as Record<string, unknown>).name).toBe("custom_ReadNotifications");
+    expect((blocks[3]!.tool as Record<string, unknown>).name).toBe("custom_lookup");
+    expect((blocks[4]!.tool as Record<string, unknown>).name).toBe("custom_lookup");
+    expect(blocks[5]!.cache_control).toEqual({ type: "ephemeral", ttl: "1h", scope: "turn" });
+    expect([...shaped.toolNames]).toEqual([
+      ["custom_lookup", "lookup"],
+      ["custom_ReadNotifications", "ReadNotifications"],
+    ]);
+    expect(body).toEqual(original);
+  });
+
+  test("typed inline builtin definitions and their references keep their fixed names", () => {
+    const definition = { type: "bash_20250124", name: "bash", input_schema: { properties: { scope: { type: "string" } } } };
+    const content = [{ type: "tool_addition", tool: { type: "tool_definition", definition } },
+      { type: "tool_removal", tool: { type: "tool_reference", name: "bash" } }];
+    const source = { ...SOURCE, tools: [], messages: [{ role: "system", content }] };
+    const built = buildAnthropicMessagesPassthroughRequest(oauthProvider(), "m", source);
+    expect(built.wireBody.messages).toEqual(source.messages);
+    expect(built.oauthToolNames?.size).toBe(0);
+    const collision = { ...source, tools: [{ name: "bash", input_schema: {} }] };
+    expect(() => buildAnthropicMessagesPassthroughRequest(oauthProvider(), "m", collision)).toThrow("inline typed and client tool names collide");
+    expect(definition.name).toBe("bash");
+  });
+
   test("a key-auth provider gets no OAuth shaping", () => {
     const shaped = anthropicMessagesNativeWireBody({ baseUrl: "https://api.anthropic.com", authMode: "key" }, "m", SOURCE);
     expect(shaped.oauthToolNames).toBeUndefined();

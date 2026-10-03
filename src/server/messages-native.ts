@@ -837,6 +837,7 @@ export function nativeMessagesCountBody(
   cc: OcxConfig["claudeCode"],
   body: Rec,
   rows: Pick<NativeMessagesSelector, "effortRow" | "fastRow">,
+  clientIdentity?: AnthropicClientIdentity,
 ): Rec | undefined {
   if (typeof body.model !== "string") return undefined;
   try {
@@ -858,7 +859,7 @@ export function nativeMessagesCountBody(
     };
     if (nativeMessagesDeclineReason(route, body, config, selector) !== undefined) return undefined;
     // The body without a credential: counting never resolves or refreshes an OAuth account.
-    return anthropicMessagesNativeWireBody(route.provider, route.modelId, body).wireBody;
+    return anthropicMessagesNativeWireBody(route.provider, route.modelId, body, { clientIdentity }).wireBody;
   } catch {
     return undefined;
   }

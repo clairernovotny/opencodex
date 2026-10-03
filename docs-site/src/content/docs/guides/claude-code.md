@@ -99,9 +99,14 @@ With both `protocols.rollout.managedMessagesNative` and
 `protocols.rollout.managedMessagesNativeOAuth` enabled, direct Anthropic OAuth routes
 can use the stored account pool while preserving Claude's native message history and
 cache breakpoints. Session affinity, model routes, pause/cooldown exclusions and bounded
-pre-output account recovery follow the same pool policy. OAuth tool references are renamed
+pre-output account recovery follow the same pool policy. OAuth tool references, including inline
+tool additions and removals in native Claude Code Messages, are renamed
 consistently with their declarations. A switch may cold-start the replacement account's cache;
-this does not provide a shared cache across accounts. The switches remain opt-in.
+this does not provide a shared cache across accounts. The switches remain opt-in. Recognized native CLI and Desktop Code requests retain their
+billing/identity preamble and known feature beta headers, avoiding schema-refusal fallback.
+Generated requests keep the SDK identity shape. Inline tool additions/removals and their
+references use consistent OAuth names. This preserves request structure; it does not guarantee
+a cache hit for changing prompts or transfer a cache between accounts.
 
 ## Quickstart
 
